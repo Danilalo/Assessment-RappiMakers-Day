@@ -1,0 +1,12 @@
+quiero cambiar la representacion del dashboard, quiero en el header, veamos dos filtros adicioanales de filtro de fecha y filtro de horas, adicionalmente un bton que permita actualizar los datos
+
+En la primera seccion de las tarjetas de informacion quiero, un KPI Card de Tiendas Ahora, un KPI Card de promedio del periodo seleccionado, KPI Card de pico maximo del rango y un KPI Card Uptime % (>umbral)
+
+En la segunda seccion tener un grafico principal donnde sea una serie temporal interactiva (zoom, hover, seleccion de rango) donde podamos vver 
+- Linea de tiendas visibles
+- Banda de +-1 std dev sobreada
+- Linea de media movil (5min)
+
+En el siguiente bloque quiero que este al lado izquierdo el chatbot integrado y segun la respuesta del chatbot me pueda variar una grafica que se represente en la derecha del bot.
+
+Y en el ultimo bloque un Heatmap que represente Dia x Hora (intensidad = tiendas) y a la derecha un promedio por hora del dia en una bar chart con color gradiente
