@@ -1,72 +1,93 @@
 "use client";
 
-import { useState } from "react";
-import useSWR from "swr";
+import { useState, useCallback, useEffect } from "react";
+import { DashboardHeader } from "./dashboard-header";
 import { KpiCards } from "./kpi-cards";
 import { AvailabilityChart } from "./availability-chart";
-import { SourceComparisonChart } from "./source-comparison-chart";
-import { SourceStatsTable } from "./source-stats-table";
-import { SourceFilter } from "./source-filter";
-import type { DataPoint, Summary } from "@/lib/data";
+import { Chatbot } from "./chatbot";
+import { DynamicChart } from "./dynamic-chart";
+import { HeatmapChart } from "./heatmap-chart";
+import { HourlyAvgChart } from "./hourly-avg-chart";
+import type { KpiData } from "./kpi-cards";
+import type { TimeSeriesPoint } from "./availability-chart";
+import type { HeatmapPoint } from "./heatmap-chart";
+import type { HourlyAvgPoint } from "./hourly-avg-chart";
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+interface FilteredData {
+  kpis: KpiData;
+  time_series: TimeSeriesPoint[];
+  heatmap: HeatmapPoint[];
+  hourly_avg: HourlyAvgPoint[];
+}
 
 export function DashboardContent() {
-  const [selectedSource, setSelectedSource] = useState("all");
+  const [dateStart, setDateStart] = useState("2026-02-01");
+  const [dateEnd, setDateEnd] = useState("2026-02-11");
+  const [hourStart, setHourStart] = useState(0);
+  const [hourEnd, setHourEnd] = useState(23);
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<FilteredData | null>(null);
+  const [chatChart, setChatChart] = useState<string | null>(null);
 
-  const { data: summaryData } = useSWR<{ summary: Summary; labels: string[] }>(
-    "/api/data?type=summary",
-    fetcher
-  );
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        date_start: dateStart,
+        date_end: dateEnd,
+        hour_start: hourStart.toString(),
+        hour_end: hourEnd.toString(),
+        resample: "5min",
+      });
+      const res = await fetch(`/api/data/filtered?${params}`);
+      const json = await res.json();
+      setData(json);
+    } catch (e) {
+      console.error("Failed to fetch data:", e);
+    } finally {
+      setLoading(false);
+    }
+  }, [dateStart, dateEnd, hourStart, hourEnd]);
 
-  const { data: chartResponse } = useSWR<{ data: DataPoint[] }>(
-    selectedSource === "all"
-      ? "/api/data?type=sampled"
-      : `/api/data?source=${encodeURIComponent(selectedSource)}`,
-    fetcher
-  );
-
-  const summary = summaryData?.summary ?? null;
-  const labels = summaryData?.labels ?? [];
-  const chartData = chartResponse?.data ?? null;
+  // Initial load
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-6">
-      {/* KPI Cards */}
-      <KpiCards summary={summary} />
+    <>
+      <DashboardHeader
+        dateStart={dateStart} dateEnd={dateEnd}
+        hourStart={hourStart} hourEnd={hourEnd}
+        onDateStartChange={setDateStart} onDateEndChange={setDateEnd}
+        onHourStartChange={setHourStart} onHourEndChange={setHourEnd}
+        onRefresh={fetchData} loading={loading}
+      />
+      <div className="mx-auto max-w-7xl px-6 py-6 space-y-6">
+        {/* KPI Cards */}
+        <KpiCards kpis={data?.kpis ?? null} />
 
-      {/* Filter Bar */}
-      <div className="mt-6 flex items-center justify-between">
-        <h2 className="text-sm font-medium text-muted-foreground">
-          {selectedSource === "all"
-            ? "Vista general de todas las ventanas"
-            : `Filtrando: ${selectedSource}`}
-        </h2>
-        <SourceFilter labels={labels} value={selectedSource} onChange={setSelectedSource} />
-      </div>
-
-      {/* Main Chart */}
-      <div className="mt-4">
+        {/* Main Time Series Chart */}
         <AvailabilityChart
-          data={chartData}
-          title={
-            selectedSource === "all"
-              ? "Tiendas Visibles - Todas las Ventanas"
-              : `Tiendas Visibles - ${selectedSource}`
-          }
-          description={
-            selectedSource === "all"
-              ? "Vista consolidada de todas las ventanas de monitoreo"
-              : `Datos de la ventana ${selectedSource}`
-          }
+          data={data?.time_series ?? null}
+          title="Tiendas Visibles en el Tiempo"
+          description="Linea principal con banda ±1 std dev y media movil 5min"
         />
-      </div>
 
-      {/* Bottom row: Comparison + Table */}
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <SourceComparisonChart sources={summary?.sources ?? null} />
-        <SourceStatsTable sources={summary?.sources ?? null} />
+        {/* Chatbot + Dynamic Chart */}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="min-h-[450px]">
+            <Chatbot onChartUpdate={setChatChart} />
+          </div>
+          <div className="min-h-[450px]">
+            <DynamicChart chartJson={chatChart} />
+          </div>
+        </div>
+
+        {/* Bottom row: Heatmap + Hourly Avg */}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <HeatmapChart data={data?.heatmap ?? null} />
+          <HourlyAvgChart data={data?.hourly_avg ?? null} />
+        </div>
       </div>
-    </div>
+    </>
   );
 }

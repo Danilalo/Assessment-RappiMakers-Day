@@ -172,9 +172,9 @@ async def data_filtered(
     uptime_pct = round(float((df["value"] > threshold).mean() * 100), 1)
 
     kpis = {
-        "current": current_value,
-        "average": avg_value,
-        "peak": max_value,
+        "current_stores": current_value,
+        "period_avg": avg_value,
+        "peak_max": max_value,
         "uptime_pct": uptime_pct,
         "threshold": round(threshold, 0),
         "total_records": len(df),
@@ -183,23 +183,28 @@ async def data_filtered(
     # --- Time series (resampled) ---
     ts = df.set_index("timestamp")["value"].resample(resample).agg(["mean", "std"]).reset_index()
     ts.columns = ["timestamp", "mean", "std"]
-    ts["std"] = ts["std"].fillna(0)
+    ts = ts.fillna(0)  # replace all NaN with 0
     # 5-min moving average
     ts["ma_5min"] = ts["mean"].rolling(window=max(1, 5 // max(1, int(resample.replace("min", "").replace("h", "60").replace("D", "1440")) if resample[-1] != 's' else 1)), min_periods=1).mean()
     ts["upper"] = ts["mean"] + ts["std"]
     ts["lower"] = (ts["mean"] - ts["std"]).clip(lower=0)
+    ts["value"] = ts["mean"]  # frontend expects 'value' field
+    # Ensure no NaN/Inf in output
+    ts = ts.fillna(0).replace([float('inf'), float('-inf')], 0)
     ts["timestamp"] = ts["timestamp"].astype(str)
     time_series = ts.to_dict(orient="records")
 
     # --- Heatmap: Day x Hour ---
     df["date"] = df["timestamp"].dt.date.astype(str)
     heatmap_df = df.groupby(["date", "hour"])["value"].mean().reset_index()
+    heatmap_df.rename(columns={"date": "day"}, inplace=True)
     heatmap_df["value"] = heatmap_df["value"].round(0).astype(int)
     heatmap = heatmap_df.to_dict(orient="records")
 
     # --- Hourly average bar chart ---
     hourly_avg_df = df.groupby("hour")["value"].mean().reset_index()
-    hourly_avg_df["value"] = hourly_avg_df["value"].round(0).astype(int)
+    hourly_avg_df.rename(columns={"value": "avg_value"}, inplace=True)
+    hourly_avg_df["avg_value"] = hourly_avg_df["avg_value"].round(0).astype(int)
     hourly_avg = hourly_avg_df.to_dict(orient="records")
 
     return {
